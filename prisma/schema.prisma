@@ -1,0 +1,285 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique // ADMINISTRADOR, DENTISTA, RECEPCIONISTA, FINANCEIRO, AUXILIAR
+  description String
+  permissions String   // JSON array de strings de permissões
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model User {
+  id                   String              @id @default(cuid())
+  name                 String
+  email                String              @unique
+  passwordHash         String
+  cro                  String?             // Registro profissional do dentista
+  specialty            String?             // Especialidade (Ortodontia, Endodontia, etc.)
+  phone                String?
+  avatarUrl            String?
+  roleId               String
+  role                 Role                @relation(fields: [roleId], references: [id])
+  twoFactorEnabled     Boolean             @default(false)
+  twoFactorSecret      String?
+  failedLoginAttempts  Int                 @default(0)
+  lockoutUntil         DateTime?
+  isActive             Boolean             @default(true)
+  sessions             Session[]
+  appointmentsAsDentist Appointment[]      @relation("DentistAppointments")
+  clinicalEvolutions   ClinicalEvolution[]
+  commissions          Commission[]
+  auditLogs            AuditLog[]
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  ipAddress  String?
+  userAgent  String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName  String?
+  action    String   // LOGIN, LOGOUT, CREATE, UPDATE, DELETE, EXPORT
+  entity    String   // Paciente, Prontuario, Odontograma, Financeiro, etc.
+  entityId  String?
+  details   String?  // JSON string
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+model Patient {
+  id                  String              @id @default(cuid())
+  code                Int                 @unique // Código sequencial do paciente
+  name                String
+  cpf                 String?             @unique
+  rg                  String?
+  birthDate           DateTime?
+  gender              String?             // M, F, Outro
+  phone               String
+  whatsapp            String?
+  email               String?
+  address             String?
+  number              String?
+  neighborhood        String?
+  city                String?
+  state               String?
+  zipCode             String?
+  occupation          String?
+  avatarUrl           String?
+  insuranceName       String?             // Convênio
+  insuranceCardNumber String?
+  status              String              @default("ATIVO") // ATIVO, INATIVO, EM_TRATAMENTO
+  notes               String?
+  anamnese            Anamnese?
+  appointments        Appointment[]
+  odontogramItems     OdontogramItem[]
+  treatmentPlans      TreatmentPlan[]
+  clinicalEvolutions  ClinicalEvolution[]
+  documents           Document[]
+  financialAccounts   FinancialAccount[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+}
+
+model Anamnese {
+  id                      String   @id @default(cuid())
+  patientId               String   @unique
+  patient                 Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  hasAllergies            Boolean  @default(false)
+  allergiesDetails        String?  // Alergias medicamentosas (penicilina, etc)
+  hasHypertension         Boolean  @default(false)
+  hasDiabetes             Boolean  @default(false)
+  hasHeartCondition       Boolean  @default(false)
+  hasBleedingProblems     Boolean  @default(false)
+  isPregnant              Boolean  @default(false)
+  isSmoker                Boolean  @default(false)
+  currentMedications      String?  // Remédios em uso
+  previousSurgeries       String?
+  chiefComplaint          String?  // Queixa principal
+  emergencyContactName    String?
+  emergencyContactPhone   String?
+  updatedAt               DateTime @updatedAt
+}
+
+model Appointment {
+  id            String    @id @default(cuid())
+  patientId     String
+  patient       Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  dentistId     String
+  dentist       User      @relation("DentistAppointments", fields: [dentistId], references: [id])
+  date          String    // YYYY-MM-DD
+  startTime     String    // HH:mm (Ex: "09:00")
+  endTime       String    // HH:mm (Ex: "09:45")
+  durationMin   Int       @default(30)
+  chairNumber   Int       @default(1)
+  status        String    @default("AGENDADO") // AGENDADO, CONFIRMADO, EM_ESPERA, EM_ATENDIMENTO, CONCLUIDO, FALTA, CANCELADO
+  procedureType String    // Consulta Inicial, Limpeza, Canal, Restauração, etc.
+  notes         String?
+  reminderSent  Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model OdontogramItem {
+  id          String   @id @default(cuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  toothNumber Int      // Ex: 18, 11, 21, 51...
+  face        String   // "GERAL", "V", "L", "M", "D", "O"
+  condition   String   // "CARIE", "RESTAURACAO_RESINA", "CANAL", "PROTESE", "EXTRACAO_INDICADA", "EXTRACAO_REALIZADA", "IMPLANTE", "COROA", "HIGIDO"
+  stage       String   @default("INICIAL") // INICIAL (Diagnóstico), PLANEJADO, EXECUTADO
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TreatmentPlan {
+  id             String               @id @default(cuid())
+  patientId      String
+  patient        Patient              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  title          String
+  status         String               @default("EM_ELABORACAO") // EM_ELABORACAO, APROVADO, EM_ANDAMENTO, CONCLUIDO, CANCELADO
+  totalAmount    Float                @default(0.0)
+  discountAmount Float                @default(0.0)
+  finalAmount    Float                @default(0.0)
+  paymentTerms   String?              // "3x no Cartão de Crédito", "À vista com 5%", etc.
+  notes          String?
+  approvedAt     DateTime?
+  procedures     TreatmentProcedure[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+}
+
+model TreatmentProcedure {
+  id            String        @id @default(cuid())
+  planId        String
+  plan          TreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  toothNumber   Int?
+  procedureName String
+  category      String?       // Dentística, Periodontia, Cirurgia, etc.
+  cost          Float
+  status        String        @default("PENDENTE") // PENDENTE, EM_EXECUCAO, CONCLUIDO
+  notes         String?
+  executedAt    DateTime?
+  createdAt     DateTime      @default(now())
+}
+
+model ClinicalEvolution {
+  id            String   @id @default(cuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  dentistId     String
+  dentist       User     @relation(fields: [dentistId], references: [id])
+  date          DateTime @default(now())
+  toothInvolved String?
+  procedureDone String
+  observations  String
+  signed        Boolean  @default(true)
+  signatureData String?  // Base64 ou hash da assinatura
+  createdAt     DateTime @default(now())
+}
+
+model Document {
+  id               String    @id @default(cuid())
+  patientId        String
+  patient          Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type             String    // TERMO_CONSENTIMENTO, CONTRATO, ATESTADO, RECEITA
+  title            String
+  content          String    // Conteúdo em texto / HTML / markdown
+  signedByPatient  Boolean   @default(false)
+  patientSignature String?   // Base64 da assinatura
+  signedByDentist  Boolean   @default(false)
+  dentistSignature String?   // Base64 da assinatura
+  signedAt         DateTime?
+  createdAt        DateTime  @default(now())
+}
+
+model FinancialAccount {
+  id            String    @id @default(cuid())
+  type          String    // RECEBER, PAGAR
+  category      String    // Procedimento, Aluguel, Laboratório, Dental/Material, etc.
+  description   String
+  amount        Float
+  dueDate       String    // YYYY-MM-DD
+  paymentDate   String?   // YYYY-MM-DD
+  status        String    @default("PENDENTE") // PENDENTE, PAGO, ATRASADO, CANCELADO
+  paymentMethod String?   // PIX, CARTAO_CREDITO, CARTAO_DEBITO, DINHEIRO, BOLETO, CONVENIO
+  patientId     String?
+  patient       Patient?  @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  supplier      String?
+  installments  String?   // "1/3", "2/3", etc.
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model StockItem {
+  id             String          @id @default(cuid())
+  name           String
+  category       String          // Anestésicos, Resinas, Descartáveis, Moldagem, Cirurgia
+  sku            String?         @unique
+  quantity       Int             @default(0)
+  minQuantity    Int             @default(5)
+  unit           String          @default("UN") // UN, CX, PCT, FRASCO
+  costPrice      Float           @default(0.0)
+  supplier       String?
+  batchNumber    String?
+  expirationDate String?         // YYYY-MM-DD
+  movements      StockMovement[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model StockMovement {
+  id             String    @id @default(cuid())
+  itemId         String
+  item           StockItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  type           String    // ENTRADA, SAIDA, AJUSTE
+  quantity       Int
+  reason         String    // Compra, Uso em Paciente, Vencimento, Inventário
+  registeredBy   String
+  createdAt      DateTime  @default(now())
+}
+
+model Commission {
+  id              String    @id @default(cuid())
+  dentistId       String
+  dentist         User      @relation(fields: [dentistId], references: [id])
+  procedureName   String
+  totalValue      Float
+  commissionRate  Float     // Ex: 40.0 (%)
+  commissionValue Float
+  status          String    @default("PENDENTE") // PENDENTE, PAGO
+  periodMonth     String    // YYYY-MM
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+}
+
+model InsurancePlan {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  cnpj                String?
+  contactPhone        String?
+  contactEmail        String?
+  reimbursementDays   Int      @default(30)
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+}
